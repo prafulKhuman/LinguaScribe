@@ -1,7 +1,7 @@
 
 "use client";
 
-import { useState, useRef } from "react";
+import { useState, useRef, useEffect } from "react";
 import { Wand2, TextQuote, Tags, Loader2, Copy, Download, Upload, FileAudio } from "lucide-react";
 
 import { improveTranscription } from "@/ai/flows/improve-transcription";
@@ -30,6 +30,15 @@ export function LinguaScribePage() {
     const [progressStatus, setProgressStatus] = useState("");
     const { toast } = useToast();
     const fileInputRef = useRef<HTMLInputElement>(null);
+    const progressIntervalRef = useRef<NodeJS.Timeout | null>(null);
+
+    useEffect(() => {
+        return () => {
+            if (progressIntervalRef.current) {
+                clearInterval(progressIntervalRef.current);
+            }
+        };
+    }, []);
 
     const handleFileChange = (event: React.ChangeEvent<HTMLInputElement>) => {
         const file = event.target.files?.[0];
@@ -37,6 +46,9 @@ export function LinguaScribePage() {
             setSelectedFile(file);
             setProgress(0);
             setProgressStatus("");
+             if (progressIntervalRef.current) {
+                clearInterval(progressIntervalRef.current);
+            }
         }
     };
     
@@ -57,42 +69,71 @@ export function LinguaScribePage() {
         setInputText("");
         setProgress(0);
         setProgressStatus("Preparing file...");
+        if (progressIntervalRef.current) {
+            clearInterval(progressIntervalRef.current);
+        }
 
         try {
             const reader = new FileReader();
             
             reader.onprogress = (event) => {
                 if (event.lengthComputable) {
-                    const percentage = Math.round((event.loaded / event.total) * 100);
+                    // File reading progress will account for the first 50%
+                    const percentage = Math.round((event.loaded / event.total) * 50);
                     setProgress(percentage);
-                    setProgressStatus(`Reading file: ${percentage}%`);
+                    setProgressStatus(`Reading file: ${Math.round((event.loaded / event.total) * 100)}%`);
                 }
             };
 
             reader.readAsDataURL(selectedFile);
             reader.onload = async () => {
                 try {
-                    setProgress(100);
+                    setProgress(50);
                     setProgressStatus("File read complete. Transcribing with AI...");
+                    
+                    // Simulate AI progress from 50% to 99%
+                    progressIntervalRef.current = setInterval(() => {
+                        setProgress(prev => {
+                            if (prev >= 99) {
+                                if(progressIntervalRef.current) clearInterval(progressIntervalRef.current);
+                                return 99;
+                            }
+                            return prev + 1;
+                        });
+                    }, 200);
+
                     const mediaDataUri = reader.result as string;
                     const result = await transcribeAudio({ mediaDataUri });
+
+                    if (progressIntervalRef.current) clearInterval(progressIntervalRef.current);
+                    setProgress(100);
+                    setProgressStatus("Transcription Complete!");
+                    
                     setInputText(result.transcription);
                     toast({
                         title: "Transcription Complete!",
                         description: "The transcribed text is now in the text area below.",
                     });
+
+                    setTimeout(() => {
+                         setIsLoading(false);
+                         setLoadingAction(null);
+                         setProgress(0);
+                         setProgressStatus("");
+                    }, 1000)
+
                     setSelectedFile(null);
                      if(fileInputRef.current) {
                         fileInputRef.current.value = "";
                     }
                 } catch (error) {
+                    if (progressIntervalRef.current) clearInterval(progressIntervalRef.current);
                     console.error("Transcription failed inside reader:", error);
                     toast({
                         title: "An error occurred",
                         description: "Failed to transcribe the file. Please try again.",
                         variant: "destructive",
                     });
-                } finally {
                     setIsLoading(false);
                     setLoadingAction(null);
                     setProgress(0);
@@ -100,6 +141,7 @@ export function LinguaScribePage() {
                 }
             };
             reader.onerror = (error) => {
+                if (progressIntervalRef.current) clearInterval(progressIntervalRef.current);
                 console.error("File reading failed:", error);
                 toast({
                     title: "An error occurred",
@@ -113,6 +155,7 @@ export function LinguaScribePage() {
             };
         } catch (error) {
              console.error("Transcription failed:", error);
+             if (progressIntervalRef.current) clearInterval(progressIntervalRef.current);
             toast({
                 title: "An error occurred",
                 description: "Failed to transcribe the file. Please try again.",
@@ -237,7 +280,7 @@ export function LinguaScribePage() {
                                     disabled={isLoading}
                                     className="h-12 text-base cursor-pointer"
                                 />
-                                {selectedFile && <p className="text-sm text-muted-foreground mt-2">Selected: {selectedFile.name}</p>}
+                                {selectedFile && !isLoading && <p className="text-sm text-muted-foreground mt-2">Selected: {selectedFile.name}</p>}
                             </div>
                            
                             <Button onClick={handleTranscribe} disabled={isLoading || !selectedFile} className="bg-primary text-primary-foreground hover:bg-primary/90 h-12">
@@ -250,9 +293,9 @@ export function LinguaScribePage() {
                             </Button>
                         </div>
                         {isLoading && loadingAction === 'transcribe' && (
-                            <div className="space-y-2">
+                            <div className="space-y-2 pt-4">
                                 <Progress value={progress} className="w-full" />
-                                <p className="text-sm text-muted-foreground">{progressStatus}</p>
+                                <p className="text-sm text-muted-foreground text-center">{progressStatus}</p>
                             </div>
                         )}
                     </CardContent>
