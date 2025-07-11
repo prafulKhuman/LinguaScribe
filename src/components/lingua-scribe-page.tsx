@@ -1,3 +1,4 @@
+
 "use client";
 
 import { useState, useRef } from "react";
@@ -54,21 +55,40 @@ export function LinguaScribePage() {
             const reader = new FileReader();
             reader.readAsDataURL(selectedFile);
             reader.onload = async () => {
-                const mediaDataUri = reader.result as string;
-                const result = await transcribeAudio({ mediaDataUri });
-                setInputText(result.transcription);
-                toast({
-                    title: "Transcription Complete!",
-                    description: "The transcribed text is now in the text area below.",
-                });
-                setSelectedFile(null);
-                if(fileInputRef.current) {
-                    fileInputRef.current.value = "";
+                try {
+                    const mediaDataUri = reader.result as string;
+                    const result = await transcribeAudio({ mediaDataUri });
+                    setInputText(result.transcription);
+                    toast({
+                        title: "Transcription Complete!",
+                        description: "The transcribed text is now in the text area below.",
+                    });
+                    setSelectedFile(null);
+                    if(fileInputRef.current) {
+                        fileInputRef.current.value = "";
+                    }
+                } catch (error) {
+                    console.error("Transcription failed inside reader:", error);
+                    toast({
+                        title: "An error occurred",
+                        description: "Failed to transcribe the file. Please try again.",
+                        variant: "destructive",
+                    });
+                } finally {
+                    setIsLoading(false);
+                    setLoadingAction(null);
                 }
             };
             reader.onerror = (error) => {
-                throw error;
-            }
+                console.error("File reading failed:", error);
+                toast({
+                    title: "An error occurred",
+                    description: "Failed to read the selected file.",
+                    variant: "destructive",
+                });
+                setIsLoading(false);
+                setLoadingAction(null);
+            };
         } catch (error) {
              console.error("Transcription failed:", error);
             toast({
@@ -76,7 +96,6 @@ export function LinguaScribePage() {
                 description: "Failed to transcribe the file. Please try again.",
                 variant: "destructive",
             });
-        } finally {
             setIsLoading(false);
             setLoadingAction(null);
         }
