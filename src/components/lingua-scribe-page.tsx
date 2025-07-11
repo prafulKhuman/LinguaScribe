@@ -15,6 +15,7 @@ import { Textarea } from "@/components/ui/textarea";
 import { useToast } from "@/hooks/use-toast";
 import { Badge } from "@/components/ui/badge";
 import { Input } from "@/components/ui/input";
+import { Progress } from "@/components/ui/progress";
 
 type AiAction = 'improve' | 'summarize' | 'keywords' | 'transcribe';
 
@@ -25,6 +26,8 @@ export function LinguaScribePage() {
     const [isLoading, setIsLoading] = useState(false);
     const [loadingAction, setLoadingAction] = useState<AiAction | null>(null);
     const [selectedFile, setSelectedFile] = useState<File | null>(null);
+    const [progress, setProgress] = useState(0);
+    const [progressStatus, setProgressStatus] = useState("");
     const { toast } = useToast();
     const fileInputRef = useRef<HTMLInputElement>(null);
 
@@ -32,6 +35,8 @@ export function LinguaScribePage() {
         const file = event.target.files?.[0];
         if (file) {
             setSelectedFile(file);
+            setProgress(0);
+            setProgressStatus("");
         }
     };
     
@@ -50,12 +55,25 @@ export function LinguaScribePage() {
         setOutputText(null);
         setOutputTitle("");
         setInputText("");
+        setProgress(0);
+        setProgressStatus("Preparing file...");
 
         try {
             const reader = new FileReader();
+            
+            reader.onprogress = (event) => {
+                if (event.lengthComputable) {
+                    const percentage = Math.round((event.loaded / event.total) * 100);
+                    setProgress(percentage);
+                    setProgressStatus(`Reading file: ${percentage}%`);
+                }
+            };
+
             reader.readAsDataURL(selectedFile);
             reader.onload = async () => {
                 try {
+                    setProgress(100);
+                    setProgressStatus("File read complete. Transcribing with AI...");
                     const mediaDataUri = reader.result as string;
                     const result = await transcribeAudio({ mediaDataUri });
                     setInputText(result.transcription);
@@ -64,7 +82,7 @@ export function LinguaScribePage() {
                         description: "The transcribed text is now in the text area below.",
                     });
                     setSelectedFile(null);
-                    if(fileInputRef.current) {
+                     if(fileInputRef.current) {
                         fileInputRef.current.value = "";
                     }
                 } catch (error) {
@@ -77,6 +95,8 @@ export function LinguaScribePage() {
                 } finally {
                     setIsLoading(false);
                     setLoadingAction(null);
+                    setProgress(0);
+                    setProgressStatus("");
                 }
             };
             reader.onerror = (error) => {
@@ -88,6 +108,8 @@ export function LinguaScribePage() {
                 });
                 setIsLoading(false);
                 setLoadingAction(null);
+                setProgress(0);
+                setProgressStatus("");
             };
         } catch (error) {
              console.error("Transcription failed:", error);
@@ -98,6 +120,8 @@ export function LinguaScribePage() {
             });
             setIsLoading(false);
             setLoadingAction(null);
+            setProgress(0);
+            setProgressStatus("");
         }
     };
 
@@ -201,7 +225,7 @@ export function LinguaScribePage() {
                         <CardTitle className="font-headline flex items-center gap-2"><FileAudio/> Transcribe Audio/Video</CardTitle>
                         <CardDescription>Upload an audio or video file to get a transcription.</CardDescription>
                     </CardHeader>
-                    <CardContent>
+                    <CardContent className="space-y-4">
                         <div className="flex flex-col sm:flex-row gap-4">
                             <div className="flex-grow">
                                 <Input
@@ -225,6 +249,12 @@ export function LinguaScribePage() {
                                 Transcribe File
                             </Button>
                         </div>
+                        {isLoading && loadingAction === 'transcribe' && (
+                            <div className="space-y-2">
+                                <Progress value={progress} className="w-full" />
+                                <p className="text-sm text-muted-foreground">{progressStatus}</p>
+                            </div>
+                        )}
                     </CardContent>
                 </Card>
 
